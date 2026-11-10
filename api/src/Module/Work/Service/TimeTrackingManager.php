@@ -380,9 +380,9 @@ final class TimeTrackingManager
     private function pdfResponse(array $pdf): Response
     {
         $response = new Response($pdf['binary'], Response::HTTP_OK, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => sprintf('inline; filename="%s"', $pdf['filename']),
-            'Cache-Control' => 'private, no-store',
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => \sprintf('inline; filename="%s"', $pdf['filename']),
+            'Cache-Control'       => 'private, no-store',
         ]);
         $response->headers->set('Content-Length', (string) \strlen($pdf['binary']));
 

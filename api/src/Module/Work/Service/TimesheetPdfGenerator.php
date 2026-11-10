@@ -27,15 +27,15 @@ final class TimesheetPdfGenerator
     ];
 
     private const MONTHS = [
-        1 => 'janvier',
-        2 => 'février',
-        3 => 'mars',
-        4 => 'avril',
-        5 => 'mai',
-        6 => 'juin',
-        7 => 'juillet',
-        8 => 'août',
-        9 => 'septembre',
+        1  => 'janvier',
+        2  => 'février',
+        3  => 'mars',
+        4  => 'avril',
+        5  => 'mai',
+        6  => 'juin',
+        7  => 'juillet',
+        8  => 'août',
+        9  => 'septembre',
         10 => 'octobre',
         11 => 'novembre',
         12 => 'décembre',
@@ -134,7 +134,7 @@ final class TimesheetPdfGenerator
                 $dateClasses[] = 'holiday';
             }
 
-            $rowsHtml .= sprintf(
+            $rowsHtml .= \sprintf(
                 '<tr class="%s">'
                 .'<td class="%s">%s</td>'
                 .'%s%s%s'
@@ -167,7 +167,7 @@ final class TimesheetPdfGenerator
         );
 
         $slug = $this->slugify($fullName);
-        $filename = sprintf('feuille-heures-%s%s.pdf', $yearMonth, '' !== $slug ? '-'.$slug : '');
+        $filename = \sprintf('feuille-heures-%s%s.pdf', $yearMonth, '' !== $slug ? '-'.$slug : '');
 
         return ['binary' => $this->renderPdf($html), 'filename' => $filename];
     }
@@ -189,15 +189,15 @@ final class TimesheetPdfGenerator
         for ($day = $start; $day <= $end; $day = $day->modify('+1 day')) {
             $dow = (int) $day->format('w'); // 0=dim … 6=sam
             $classes = [match ($dow) {
-                0 => 'sunday',
-                6 => 'saturday',
+                0       => 'sunday',
+                6       => 'saturday',
                 default => 'weekday',
             }];
             if (0 === $rowIndex % 2) {
                 $classes[] = 'stripe';
             }
             ++$rowIndex;
-            $rowsHtml .= sprintf(
+            $rowsHtml .= \sprintf(
                 '<tr class="%s">'
                 .'<td class="jour">%s</td>'
                 .'<td class="arr"></td><td class="dep"></td>'
@@ -212,7 +212,7 @@ final class TimesheetPdfGenerator
 
         $html = $this->renderBlankHtml($monthLabel, $rowsHtml, $daysInMonth);
         $binary = $this->renderPdf($html, 'landscape');
-        $filename = sprintf('pointage-vierge-%s.pdf', $yearMonth);
+        $filename = \sprintf('pointage-vierge-%s.pdf', $yearMonth);
 
         return ['binary' => $binary, 'filename' => $filename];
     }
@@ -223,7 +223,7 @@ final class TimesheetPdfGenerator
         $hours = intdiv($minutes, 60);
         $mins = $minutes % 60;
 
-        return sprintf('%d:%02d', $hours, $mins);
+        return \sprintf('%d:%02d', $hours, $mins);
     }
 
     public function formatDateLabel(\DateTimeImmutable $date): string
@@ -231,7 +231,7 @@ final class TimesheetPdfGenerator
         $weekday = self::WEEKDAYS[(int) $date->format('w')];
         $month = self::MONTHS[(int) $date->format('n')];
 
-        return sprintf('%s %d %s %s', $weekday, (int) $date->format('j'), $month, $date->format('Y'));
+        return \sprintf('%s %d %s %s', $weekday, (int) $date->format('j'), $month, $date->format('Y'));
     }
 
     /** Ex. « Mardi 1er », « Mercredi 2 ». */
@@ -241,10 +241,10 @@ final class TimesheetPdfGenerator
         $weekday = mb_strtoupper(mb_substr($weekday, 0, 1, 'UTF-8'), 'UTF-8').mb_substr($weekday, 1, null, 'UTF-8');
         $day = (int) $date->format('j');
         if (1 === $day) {
-            return sprintf('%s 1er', $weekday);
+            return \sprintf('%s 1er', $weekday);
         }
 
-        return sprintf('%s %d', $weekday, $day);
+        return \sprintf('%s %d', $weekday, $day);
     }
 
     private function renderHtml(
@@ -256,17 +256,17 @@ final class TimesheetPdfGenerator
         string $monthTotalLabel,
         int $daysInMonth,
     ): string {
-        $title = $this->e(sprintf("FEUILLE D'HEURES %d", $year));
+        $title = $this->e(\sprintf("FEUILLE D'HEURES %d", $year));
         $lastName = $this->e($lastName);
         $firstName = $this->e($firstName);
         $monthLabel = $this->e($monthLabel);
         $monthTotalLabel = $this->e($monthTotalLabel);
         // Remplit la page A4 tout en restant sur 1 page (marges + en-tête + pied).
         $rowHeight = match (true) {
-            $daysInMonth >= 31 => '16.2pt',
-            $daysInMonth === 30 => '16.8pt',
-            $daysInMonth === 29 => '17.4pt',
-            default => '18.2pt',
+            $daysInMonth >= 31  => '16.2pt',
+            30 === $daysInMonth => '16.8pt',
+            29 === $daysInMonth => '17.4pt',
+            default             => '18.2pt',
         };
 
         return <<<HTML
@@ -442,7 +442,7 @@ final class TimesheetPdfGenerator
     <table class="footer-table">
       <tr>
         <td class="label">TOTAL HEURES</td>
-        <td class="value">{$monthTotalLabel}</td>
+       <td class="value"> <!-- {$monthTotalLabel} --></td>
       </tr>
     </table>
   </div>
@@ -457,10 +457,10 @@ HTML;
         $verticalMonth = $this->verticalMonthHtml($monthLabel);
         // A4 paysage : hauteur utile plus faible → lignes plus compactes.
         $rowHeight = match (true) {
-            $daysInMonth >= 31 => '13.2pt',
-            $daysInMonth === 30 => '13.8pt',
-            $daysInMonth === 29 => '14.3pt',
-            default => '15pt',
+            $daysInMonth >= 31  => '13.2pt',
+            30 === $daysInMonth => '13.8pt',
+            29 === $daysInMonth => '14.3pt',
+            default             => '15pt',
         };
 
         return <<<HTML
@@ -656,7 +656,7 @@ HTML;
         }
         $classAttr = [] === $classes ? '' : ' class="'.implode(' ', $classes).'"';
 
-        return sprintf('<td%s>%s</td>', $classAttr, $this->e($value));
+        return \sprintf('<td%s>%s</td>', $classAttr, $this->e($value));
     }
 
     private function e(string $value): string

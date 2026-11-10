@@ -17,14 +17,14 @@ final class FrenchPublicHolidays
         $easter = $this->easterSunday($year);
 
         $dates = [
-            sprintf('%04d-01-01', $year), // Jour de l'an
-            sprintf('%04d-05-01', $year), // Fête du travail
-            sprintf('%04d-05-08', $year), // Victoire 1945
-            sprintf('%04d-07-14', $year), // Fête nationale
-            sprintf('%04d-08-15', $year), // Assomption
-            sprintf('%04d-11-01', $year), // Toussaint
-            sprintf('%04d-11-11', $year), // Armistice
-            sprintf('%04d-12-25', $year), // Noël
+            \sprintf('%04d-01-01', $year), // Jour de l'an
+            \sprintf('%04d-05-01', $year), // Fête du travail
+            \sprintf('%04d-05-08', $year), // Victoire 1945
+            \sprintf('%04d-07-14', $year), // Fête nationale
+            \sprintf('%04d-08-15', $year), // Assomption
+            \sprintf('%04d-11-01', $year), // Toussaint
+            \sprintf('%04d-11-11', $year), // Armistice
+            \sprintf('%04d-12-25', $year), // Noël
             $easter->modify('+1 day')->format('Y-m-d'),  // Lundi de Pâques
             $easter->modify('+39 days')->format('Y-m-d'), // Ascension
             $easter->modify('+50 days')->format('Y-m-d'), // Lundi de Pentecôte
@@ -62,6 +62,6 @@ final class FrenchPublicHolidays
         $month = intdiv($h + $l - 7 * $m + 114, 31);
         $day = (($h + $l - 7 * $m + 114) % 31) + 1;
 
-        return new \DateTimeImmutable(sprintf('%04d-%02d-%02d', $year, $month, $day));
+        return new \DateTimeImmutable(\sprintf('%04d-%02d-%02d', $year, $month, $day));
     }
 }

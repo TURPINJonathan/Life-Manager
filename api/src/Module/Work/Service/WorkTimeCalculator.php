@@ -109,19 +109,19 @@ final class WorkTimeCalculator
         $net = $this->netEstimator->estimateFromGross($job, $gross, $fixed);
 
         return [
-            'workedMinutes'                  => $worked,
-            'contractWeeklyMinutes'          => $contract,
-            'regularMinutes'                 => $regular,
-            'overtimeMinutes'                => $overtime,
-            'overtime1Minutes'               => $ot1,
-            'overtime2Minutes'               => $ot2,
-            'estimatedGrossCents'            => $net['estimatedGrossCents'],
-            'estimatedNetBeforeTaxCents'     => $net['estimatedNetBeforeTaxCents'],
-            'estimatedPasCents'              => $net['estimatedPasCents'],
-            'estimatedFixedDeductionsCents'  => $net['estimatedFixedDeductionsCents'],
-            'estimatedNetPayableCents'       => $net['estimatedNetPayableCents'],
-            'employeeContributionRateBps'    => $net['employeeContributionRateBps'],
-            'pasRateBps'                     => $net['pasRateBps'],
+            'workedMinutes'                 => $worked,
+            'contractWeeklyMinutes'         => $contract,
+            'regularMinutes'                => $regular,
+            'overtimeMinutes'               => $overtime,
+            'overtime1Minutes'              => $ot1,
+            'overtime2Minutes'              => $ot2,
+            'estimatedGrossCents'           => $net['estimatedGrossCents'],
+            'estimatedNetBeforeTaxCents'    => $net['estimatedNetBeforeTaxCents'],
+            'estimatedPasCents'             => $net['estimatedPasCents'],
+            'estimatedFixedDeductionsCents' => $net['estimatedFixedDeductionsCents'],
+            'estimatedNetPayableCents'      => $net['estimatedNetPayableCents'],
+            'employeeContributionRateBps'   => $net['employeeContributionRateBps'],
+            'pasRateBps'                    => $net['pasRateBps'],
         ];
     }
 
@@ -205,19 +205,19 @@ final class WorkTimeCalculator
         $net = $this->netEstimator->estimateFromGross($job, $gross, $fixed);
 
         return [
-            'workedMinutes'                  => $worked,
-            'contractMinutes'                => $contract,
-            'regularMinutes'                 => $regular,
-            'overtimeMinutes'                => $overtime,
-            'overtime1Minutes'               => $ot1,
-            'overtime2Minutes'               => $ot2,
-            'estimatedGrossCents'            => $net['estimatedGrossCents'],
-            'estimatedNetBeforeTaxCents'     => $net['estimatedNetBeforeTaxCents'],
-            'estimatedPasCents'              => $net['estimatedPasCents'],
-            'estimatedFixedDeductionsCents'  => $net['estimatedFixedDeductionsCents'],
-            'estimatedNetPayableCents'       => $net['estimatedNetPayableCents'],
-            'employeeContributionRateBps'    => $net['employeeContributionRateBps'],
-            'pasRateBps'                     => $net['pasRateBps'],
+            'workedMinutes'                 => $worked,
+            'contractMinutes'               => $contract,
+            'regularMinutes'                => $regular,
+            'overtimeMinutes'               => $overtime,
+            'overtime1Minutes'              => $ot1,
+            'overtime2Minutes'              => $ot2,
+            'estimatedGrossCents'           => $net['estimatedGrossCents'],
+            'estimatedNetBeforeTaxCents'    => $net['estimatedNetBeforeTaxCents'],
+            'estimatedPasCents'             => $net['estimatedPasCents'],
+            'estimatedFixedDeductionsCents' => $net['estimatedFixedDeductionsCents'],
+            'estimatedNetPayableCents'      => $net['estimatedNetPayableCents'],
+            'employeeContributionRateBps'   => $net['employeeContributionRateBps'],
+            'pasRateBps'                    => $net['pasRateBps'],
         ];
     }
 

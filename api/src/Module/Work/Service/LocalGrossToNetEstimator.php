@@ -24,13 +24,13 @@ final class LocalGrossToNetEstimator implements IGrossToNetEstimator
         $netPayable = max(0, $netBeforeTax - $pasCents - $fixedDeductionCents);
 
         return [
-            'estimatedGrossCents'            => $grossCents,
-            'estimatedNetBeforeTaxCents'     => $netBeforeTax,
-            'estimatedPasCents'              => $pasCents,
-            'estimatedFixedDeductionsCents'  => $fixedDeductionCents,
-            'estimatedNetPayableCents'       => $netPayable,
-            'employeeContributionRateBps'    => $contributionBps,
-            'pasRateBps'                     => $pasBps,
+            'estimatedGrossCents'           => $grossCents,
+            'estimatedNetBeforeTaxCents'    => $netBeforeTax,
+            'estimatedPasCents'             => $pasCents,
+            'estimatedFixedDeductionsCents' => $fixedDeductionCents,
+            'estimatedNetPayableCents'      => $netPayable,
+            'employeeContributionRateBps'   => $contributionBps,
+            'pasRateBps'                    => $pasBps,
         ];
     }
 
