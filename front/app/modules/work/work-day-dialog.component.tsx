@@ -21,6 +21,9 @@ type WorkDayDialogProps = {
   shortcuts: TimeShortcut[];
   timeTrackingEnabled: boolean;
   busy?: boolean;
+  /** Navigation jour précédent / suivant (ex. pointage depuis l’accueil). */
+  onPrevDay?: () => void;
+  onNextDay?: () => void;
   onChangePlanned: (next: DayLaneDraft) => void;
   onChangeActual: (next: DayLaneDraft) => void;
   onCopyPlannedToActual: () => void;
@@ -226,6 +229,8 @@ export function WorkDayDialog({
   shortcuts,
   timeTrackingEnabled,
   busy = false,
+  onPrevDay,
+  onNextDay,
   onChangePlanned,
   onChangeActual,
   onCopyPlannedToActual,
@@ -233,6 +238,7 @@ export function WorkDayDialog({
   onDelete,
 }: WorkDayDialogProps) {
   const canCopyPlanned = timeTrackingEnabled && planned.segments.length > 0;
+  const canNavigate = Boolean(onPrevDay || onNextDay);
 
   return (
     <Dialog
@@ -243,7 +249,29 @@ export function WorkDayDialog({
       size={timeTrackingEnabled ? DIALOG_SIZE.wide : DIALOG_SIZE.large}
     >
       <div className="mt-2 flex flex-col gap-4">
-        <p className="text-control text-fg-muted">{formatIsoDateFr(workDate, { weekday: 'long' })}</p>
+        {canNavigate ? (
+          <div className="flex items-center justify-center gap-1">
+            <IconButton
+              variant={ICON_BUTTON_VARIANT.ghost}
+              icon="chevron_left"
+              aria-label="Jour précédent"
+              disabled={busy || !onPrevDay}
+              onClick={onPrevDay}
+            />
+            <p className="min-w-0 flex-1 text-center text-control font-medium text-fg-primary sm:px-2">
+              {formatIsoDateFr(workDate, { weekday: 'long' })}
+            </p>
+            <IconButton
+              variant={ICON_BUTTON_VARIANT.ghost}
+              icon="chevron_right"
+              aria-label="Jour suivant"
+              disabled={busy || !onNextDay}
+              onClick={onNextDay}
+            />
+          </div>
+        ) : (
+          <p className="text-control text-fg-muted">{formatIsoDateFr(workDate, { weekday: 'long' })}</p>
+        )}
 
         <div className={cn('grid items-start gap-6', timeTrackingEnabled && 'lg:grid-cols-2')}>
           <LaneColumn

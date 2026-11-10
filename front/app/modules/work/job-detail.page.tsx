@@ -88,6 +88,10 @@ function isYearMonth(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}$/.test(value));
 }
 
+function isIsoDay(value: string | null): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
 function formatMonthLabel(yearMonth: string): string {
   const [y, m] = yearMonth.split('-').map(Number);
   const label = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(new Date(y, m - 1, 1));
@@ -144,6 +148,7 @@ export function JobDetailPage() {
         : 'temps'
       : 'temps';
   const yearMonth = isYearMonth(searchParams.get('mois')) ? searchParams.get('mois')! : currentYearMonth();
+  const focusDayParam = isIsoDay(searchParams.get('jour')) ? searchParams.get('jour')! : null;
 
   const [job, setJob] = useState<WorkJob | null>(null);
   const [loading, setLoading] = useState(true);
@@ -155,6 +160,8 @@ export function JobDetailPage() {
   const [documents, setDocuments] = useState<WorkDocument[]>([]);
   const [docFilter, setDocFilter] = useState<WorkDocumentKind | 'all'>('all');
   const [busy, setBusy] = useState(false);
+  const [monthDataReadyKey, setMonthDataReadyKey] = useState<string | null>(null);
+  const [pendingFocusDay, setPendingFocusDay] = useState<string | null>(focusDayParam);
 
   const [dayOpen, setDayOpen] = useState(false);
   const [dayDate, setDayDate] = useState(todayIsoLocal());
@@ -209,6 +216,7 @@ export function JobDetailPage() {
 
   const loadMonthData = async () => {
     if (!token || !jobId) return;
+    setMonthDataReadyKey(null);
     try {
       const [timeRows, planRows, sc, st] = await Promise.all([
         listTimeEntries(token, jobId, range.from, range.to),
@@ -220,6 +228,7 @@ export function JobDetailPage() {
       setPlanEntries(planRows);
       setShortcuts(sc);
       setStats(st);
+      setMonthDataReadyKey(`${jobId}:${yearMonth}`);
     } catch (err) {
       toastFromError(err, 'Chargement impossible.');
     }
@@ -249,6 +258,28 @@ export function JobDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, job?.id, yearMonth]);
 
+  useEffect(() => {
+    if (!focusDayParam) return;
+    setPendingFocusDay(focusDayParam);
+    const params = new URLSearchParams(searchParams);
+    params.delete('jour');
+    setSearchParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusDayParam]);
+
+  useEffect(() => {
+    if (!pendingFocusDay || !job || tab === 'documents') return;
+    const dayMonth = pendingFocusDay.slice(0, 7);
+    if (dayMonth !== yearMonth) {
+      setYearMonth(dayMonth);
+      return;
+    }
+    if (monthDataReadyKey !== `${jobId}:${yearMonth}`) return;
+    openDay(pendingFocusDay, job.timeTrackingEnabled ? 'actual' : 'planned');
+    setPendingFocusDay(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFocusDay, job, tab, yearMonth, monthDataReadyKey, jobId]);
+
   const openDay = (workDate: string, preferLane?: 'planned' | 'actual') => {
     const plan = planEntries.find((p) => p.workDate === workDate) ?? null;
     const entry = entries.find((e) => e.workDate === workDate) ?? null;
@@ -277,6 +308,7 @@ export function JobDetailPage() {
   const saveDayLane = async () => {
     if (!token || !jobId || !job) return;
     setBusy(true);
+    let saved = false;
     try {
       const tracking = job.timeTrackingEnabled;
       const nothingDirty = !plannedDirty && !actualDirty;
@@ -302,13 +334,15 @@ export function JobDetailPage() {
       if (shouldSavePlanned && shouldSaveActual) toastSuccess('Journée enregistrée.');
       else if (shouldSavePlanned) toastSuccess('Planning enregistré.');
       else toastSuccess('Pointage enregistré.');
+      // Fermer avant le reload : évite un dialog coincé si le rechargement traîne (PWA mobile).
       closeDay();
-      await loadMonthData();
+      saved = true;
     } catch (err) {
       toastFromError(err, 'Enregistrement impossible.');
     } finally {
       setBusy(false);
     }
+    if (saved) await loadMonthData();
   };
 
   const confirmDelete = async () => {
