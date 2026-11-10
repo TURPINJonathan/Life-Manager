@@ -20,7 +20,7 @@ Module/Security/
   Exception
 ```
 
-Un nouveau sujet (comptes, travail, événements) devient un nouveau dossier `Module/`, avec le même découpage, seulement les couches utiles. On n'ajoute pas d'interface s'il n'y a qu'un appelant local et pas de seconde implémentation prévue.
+Un nouveau sujet (comptes, travail, …) devient un nouveau dossier `Module/`, avec le même découpage, seulement les couches utiles. On n'ajoute pas d'interface s'il n'y a qu'un appelant local et pas de seconde implémentation prévue.
 
 Doctrine mappe explicitement `Domain/Entity`. Les DTO ne sont pas des entités.
 
@@ -30,7 +30,7 @@ API Platform sert les ressources et la doc OpenAPI. Les points d'entrée techniq
 
 - **`Module/Security`** — utilisateurs, JWT, `/api/login`, `/api/me`
 - **`Module/Category`** — catégories (icône, couleur, kind) scopées à l’utilisateur ; **enseignes liées** (`merchantIds`) et **favori** optionnel (`favoriteMerchantId`, auto si une seule enseigne)
-- **`Module/Merchant`** — enseignes (label, couleur, **icône XOR image**) scopées à l’utilisateur ; **catégories liées** (`categoryIds`) ; image stockée sous `var/uploads` (gzip) et servie décompressée via endpoint JWT
+- **`Module/Merchant`** — enseignes (label, couleur, **icône XOR image**) scopées à l’utilisateur ; **catégories liées** (`categoryIds`) ; image stockée sous `var/uploads` (gzip) et servie décompressée via endpoint JWT (`Cache-Control: private, max-age=86400`)
 - **`Module/Account`** — comptes → sous-comptes → transactions (`ledger_transaction`), solde en centimes, **forecasts mensuels** (`monthly_forecast` / `forecast_line`) ; enseigne et pièce jointe **optionnelles** sur une opération (photo/PDF sous `var/uploads` en gzip, download JWT décompressé). À la saisie, le choix d’une catégorie préremplit l’enseigne favorite ; le select enseigne liste d’abord les liées. `GET /api/sub-accounts/{id}/transactions?limit=&offset=` renvoie le relevé **plus récent en premier**, avec `hasMore` / `nextOffset` et `balanceAfterCents` cohérents page par page. Avec `categoryId` + `yearMonth` (ensemble), même endpoint filtre par catégorie et mois (`operationDate`), ordre chronologique, sans pagination ni solde courant.
 - **`Module/Work`** — travailleurs (`work_worker`) → emplois (`work_job`, dont `week_template` / `work_days_mask`) → documents (`work_document`), **planning** (`work_plan_entry` / `work_plan_segment`), pointages (`work_time_entry` / `work_time_segment`) et raccourcis (`work_time_shortcut`). Plusieurs profils sous l’utilisateur ; temps en minutes, montants en centimes ; estimation nette locale (cotisations + PAS + retenues mensuelles mutuelle / prévoyance / autres, proratisées sur la période) via `IGrossToNetEstimator` ; uploads `work-documents/{ownerId}/`. Endpoints : `/api/workers`, `/api/jobs/{id}`, documents, `time-entries`, `plan-entries` (+ `fill-month` via semaine type), `time-stats` (prévu + réel, `weeks[]` avec HS vs 35h et vs contrat), `GET /api/work-stats/dashboard?yearMonth=`, `GET /api/jobs/{id}/timesheet.pdf?yearMonth=` (feuille d’heures PDF complétée), `GET /api/jobs/{id}/timesheet-blank.pdf?yearMonth=` (pointage vierge ; Jour / matin / après-midi / Pauses / Commentaire), raccourcis, `suggest-contribution-rate`.
 
@@ -52,7 +52,7 @@ Un budget est **optionnel**, scensé à un sous-compte et à un mois (`YYYY-MM`)
 
 La duplication copie les lignes d’un mois source vers un mois cible (défaut : mois précédent → mois courant). Les stats exposent soldes (début, actuel, fin réalisée, projetés budget/réaliste), totaux planifiés/réalisés, détail par catégorie et flux hors budget.
 
-Chaque ligne de budget peut porter un **jour du mois optionnel** (`scheduledDay`, 1–31) et un montant : une échéance = une ligne. La même catégorie peut apparaître plusieurs fois (ex. le 3 et le 15 avec des montants différents). Les jours sans échéance sont appliqués en fin de mois dans la timeline. La duplication conserve le jour.
+Chaque ligne de budget peut porter un **jour du mois optionnel** (`scheduledDay`, 1–31) et un montant : une échéance = une ligne. La même catégorie peut apparaître plusieurs fois (ex. le 3 et le 15 avec des montants différents). Les lignes **sans jour** (date flexible) n’apparaissent pas dans les échéances : leur montant est **lissé** sur la timeline budget / projection, sans barre de catégorie dédiée. La duplication conserve le jour.
 
 Les **stats** exposent aussi une `timeline` jour par jour (`budgetBalanceCents`, `realisticBalanceCents`, `actualBalanceCents`, événements planifiés/réalisés) pour projeter le solde du sous-compte sur le mois. `GET /api/forecast-stats/dashboard` agrège en une seule réponse les stats de tous les sous-comptes actifs (timelines, totaux, catégories) pour le dashboard `/comptes` — graphique en **une trajectoire** (plein jusqu’à aujourd’hui, pointillé ensuite) + budget + overlay M−1, et carte **Échéances** (prochaines lignes planifiées). `GET /api/forecast-stats/series` renvoie une série mensuelle (année civile ou 12 mois glissants) avec totaux, agrégat par catégorie (dont série mensuelle par catégorie) et par sous-compte.
 
@@ -72,7 +72,7 @@ front/app/
   constants/      routes, statuts, clés
   hooks/
   layouts/        shell, barre, navigation
-  modules/        un dossier par domaine (comptes, travail, événements)
+  modules/        un dossier par domaine (comptes, travail, …)
   pages/          écrans transverses (accueil, connexion, paramètres)
   routes/         fichiers minces, sans logique
   security/       gardes

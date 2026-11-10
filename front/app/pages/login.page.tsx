@@ -50,7 +50,7 @@ export function LoginPage() {
             Connexion
           </Typography>
           <Typography variant="body" className="text-fg-secondary">
-            Retrouve tes comptes, tes prévisions et tes événements.
+            Retrouve tes comptes, tes prévisions et ton travail.
           </Typography>
         </div>
 

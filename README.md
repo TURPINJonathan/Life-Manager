@@ -1,6 +1,6 @@
 # Life Manager
 
-Outil pour organiser le quotidien : comptes et pronostics, événements, et d'autres modules ensuite.
+Outil pour organiser le quotidien : comptes, budgets et travail, et d'autres modules ensuite.
 
 Monorepo :
 
