@@ -1,5 +1,5 @@
 import { AUTH_STATUS, TOKEN_STORAGE_KEY } from '@constants';
-import { ApiError, fetchMe, loginRequest } from '@services';
+import { ApiError, clearMerchantImageCache, fetchMe, loginRequest } from '@services';
 import type { AuthStatus, AuthUser } from '@app-types';
 import { create } from 'zustand';
 
@@ -96,6 +96,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: () => {
     writeStoredToken(null);
     bootstrapPromise = Promise.resolve();
+    clearMerchantImageCache();
     set({ status: AUTH_STATUS.unauthenticated, user: null, token: null, error: null });
   },
 }));

@@ -152,7 +152,11 @@ final class MerchantManager
         }
         $relative = (string) $merchant->getImagePath();
         try {
-            return $this->uploads->createFileResponse($relative);
+            $response = $this->uploads->createFileResponse($relative);
+            // Cache navigateur privé (JWT) — complément du cache mémoire front.
+            $response->headers->set('Cache-Control', 'private, max-age=86400');
+
+            return $response;
         } catch (\InvalidArgumentException) {
             throw new MerchantNotFoundException();
         }

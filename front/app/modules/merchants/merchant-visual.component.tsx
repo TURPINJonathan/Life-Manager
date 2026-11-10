@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { Icon } from '@components';
 import { isTransparentColor } from '@constants';
-import { apiFetch } from '@services';
+import { peekMerchantImageSrc, resolveMerchantImageSrc } from '@services';
 import { useAuthStore } from '@store';
 import { cn } from '@utils';
 
@@ -19,7 +19,7 @@ type MerchantVisualProps = {
   showNativeTitle?: boolean;
 };
 
-/** Avatar enseigne (icône ou image auth). */
+/** Avatar enseigne (icône ou image auth, avec cache mémoire partagé). */
 export function MerchantVisual({
   name,
   color,
@@ -31,7 +31,9 @@ export function MerchantVisual({
   showNativeTitle = true,
 }: MerchantVisualProps) {
   const token = useAuthStore((state) => state.token);
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(() =>
+    localImageSrc || !imageUrl ? null : peekMerchantImageSrc(imageUrl),
+  );
   const transparent = isTransparentColor(color);
   const displaySrc = localImageSrc || blobUrl;
 
@@ -40,24 +42,16 @@ export function MerchantVisual({
       setBlobUrl(null);
       return;
     }
-    let revoked: string | null = null;
+
+    const cached = peekMerchantImageSrc(imageUrl);
+    if (cached) setBlobUrl(cached);
+
     let cancelled = false;
-    void (async () => {
-      try {
-        const response = await apiFetch(imageUrl, { method: 'GET' }, token);
-        if (!response.ok) return;
-        const blob = await response.blob();
-        if (cancelled) return;
-        const url = URL.createObjectURL(blob);
-        revoked = url;
-        setBlobUrl(url);
-      } catch {
-        if (!cancelled) setBlobUrl(null);
-      }
-    })();
+    void resolveMerchantImageSrc(imageUrl, token).then((url) => {
+      if (!cancelled) setBlobUrl(url);
+    });
     return () => {
       cancelled = true;
-      if (revoked) URL.revokeObjectURL(revoked);
     };
   }, [imageUrl, localImageSrc, token]);
 

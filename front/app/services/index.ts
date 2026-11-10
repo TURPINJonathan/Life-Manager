@@ -39,6 +39,13 @@ export {
   uploadMerchantImage,
 } from './merchant.service';
 export {
+  clearMerchantImageCache,
+  invalidateMerchantImage,
+  merchantImagePath,
+  peekMerchantImageSrc,
+  resolveMerchantImageSrc,
+} from './merchant-image-cache';
+export {
   archiveJob,
   archiveWorker,
   createJob,

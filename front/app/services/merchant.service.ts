@@ -1,6 +1,7 @@
 import type { Merchant } from '@app-types';
 
 import { ApiError, apiFetch, readJson } from './api-client';
+import { invalidateMerchantImage } from './merchant-image-cache';
 
 async function parseError(response: Response, fallback: string): Promise<never> {
   try {
@@ -42,7 +43,12 @@ export async function updateMerchant(
   if (!response.ok) {
     return parseError(response, 'Mise à jour d’enseigne impossible.');
   }
-  return readJson<Merchant>(response);
+  const merchant = await readJson<Merchant>(response);
+  // Passage en icône (ou remplacement) : l’ancienne image ne doit plus être servie.
+  if (body.icon !== undefined) {
+    invalidateMerchantImage(id);
+  }
+  return merchant;
 }
 
 export async function archiveMerchant(token: string, id: string): Promise<Merchant> {
@@ -50,6 +56,7 @@ export async function archiveMerchant(token: string, id: string): Promise<Mercha
   if (!response.ok) {
     return parseError(response, 'Suppression d’enseigne impossible.');
   }
+  invalidateMerchantImage(id);
   return readJson<Merchant>(response);
 }
 
@@ -60,6 +67,7 @@ export async function uploadMerchantImage(token: string, id: string, file: File)
   if (!response.ok) {
     return parseError(response, 'Upload de l’image impossible.');
   }
+  invalidateMerchantImage(id);
   return readJson<Merchant>(response);
 }
 
@@ -68,5 +76,6 @@ export async function clearMerchantImage(token: string, id: string): Promise<Mer
   if (!response.ok) {
     return parseError(response, 'Suppression de l’image impossible.');
   }
+  invalidateMerchantImage(id);
   return readJson<Merchant>(response);
 }
