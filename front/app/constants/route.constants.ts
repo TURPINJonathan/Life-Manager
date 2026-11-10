@@ -7,8 +7,6 @@ export const APP_ROUTE = {
   work: '/travail',
   workJob: '/travail/:jobId',
   workNew: '/travail/nouveau',
-  events: '/evenements',
-  eventNew: '/evenements/nouveau',
   settings: '/parametres',
   settingsSection: '/parametres/:section',
 } as const;
@@ -41,12 +39,21 @@ export function settingsPath(
   return `/parametres/${section}`;
 }
 
-export function workJobPath(jobId: string, tab?: 'pointeuse' | 'planning' | 'documents'): string {
-  const base = `/travail/${jobId}`;
-  if (!tab || tab === 'pointeuse') {
-    return base;
+export function workJobPath(
+  jobId: string,
+  tabOrOptions?:
+    'pointeuse' | 'planning' | 'documents' | { tab?: 'pointeuse' | 'planning' | 'documents'; day?: string },
+): string {
+  const options = typeof tabOrOptions === 'string' || tabOrOptions === undefined ? { tab: tabOrOptions } : tabOrOptions;
+  const params = new URLSearchParams();
+  if (options.tab && options.tab !== 'pointeuse') {
+    params.set('onglet', options.tab);
   }
-  return `${base}?onglet=${tab}`;
+  if (options.day) {
+    params.set('jour', options.day);
+  }
+  const query = params.toString();
+  return query ? `/travail/${jobId}?${query}` : `/travail/${jobId}`;
 }
 
 export function shiftYearMonth(yearMonth: string, delta: number): string {

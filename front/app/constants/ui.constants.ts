@@ -154,7 +154,7 @@ export const NAV_ITEM_VARIANT_CLASSES: Record<
 
 export const NAV_CONTAINER_CLASSES: Record<(typeof NAV_ITEM_VARIANT)[keyof typeof NAV_ITEM_VARIANT], string> = {
   rail: 'hidden shrink-0 flex-col gap-1 overflow-y-auto px-2 py-5 md:flex md:w-24',
-  tab: 'fixed inset-x-0 bottom-0 z-30 grid h-[var(--app-tab-nav-block-size)] grid-cols-4 items-end bg-page px-1 pb-[calc(0.25rem+env(safe-area-inset-bottom,0px))] md:hidden',
+  tab: 'fixed inset-x-0 bottom-0 z-30 grid h-[var(--app-tab-nav-block-size)] grid-cols-3 items-end bg-page px-1 pb-[calc(0.25rem+env(safe-area-inset-bottom,0px))] md:hidden',
 };
 
 export const NAV_ITEM_ACTIVE = 'text-accent-press dark:text-accent';
@@ -164,9 +164,6 @@ export const NAV_ICON_BOX_BASE =
   'flex h-9 w-12 items-center justify-center rounded-control transition-colors duration-(--duration-fast) md:w-14';
 export const NAV_ICON_BOX_ACTIVE = 'bg-accent-tint dark:bg-accent-ghost';
 export const NAV_ICON_BOX_INACTIVE = 'group-hover:bg-subtle';
-
-export const NAV_CREATE_ICON_BOX =
-  'flex size-8 items-center justify-center rounded-full bg-accent text-white shadow-sm transition-[background-color,transform] duration-(--duration-fast) group-hover:bg-accent-hover group-active:scale-95 md:size-9';
 
 export const POPOVER_PLACEMENT = {
   rightStart: 'right-start',
@@ -178,27 +175,6 @@ export const POPOVER_OFFSET = 8;
 
 export const POPOVER_PANEL_CLASSES =
   'fixed z-50 flex min-w-56 animate-art-in flex-col overflow-y-auto rounded-panel border border-border bg-card p-2 shadow-lg';
-
-export const CREATE_ENTRY_STATUS = {
-  available: 'available',
-  soon: 'soon',
-} as const;
-
-export const CREATE_MENU_TITLE = 'Créer';
-export const CREATE_SOON_BADGE_LABEL = 'Bientôt';
-
-export const CREATE_MENU_ROW_CLASSES = `${MENU_ROW_GEOMETRY_CLASSES} min-h-12 w-full justify-between no-underline`;
-
-export const CREATE_MENU_ROW_STATE_CLASSES: Record<
-  (typeof CREATE_ENTRY_STATUS)[keyof typeof CREATE_ENTRY_STATUS],
-  string
-> = {
-  available: MENU_ROW_INTERACTIVE_CLASSES,
-  soon: 'cursor-default text-fg-muted',
-};
-
-export const CREATE_MENU_BADGE_CLASSES =
-  'shrink-0 rounded-full bg-page px-2 py-0.5 text-control text-fg-muted dark:bg-elevated';
 
 export const APP_PAGE_GUTTER_CLASSES = 'px-3 py-3 md:p-6';
 

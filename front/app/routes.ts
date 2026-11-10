@@ -9,7 +9,6 @@ export default [
         route('comptes/:subAccountId', 'routes/account-ledger.tsx'),
         route('travail', 'routes/work.tsx'),
         route('travail/:jobId', 'routes/work-job.tsx'),
-        route('evenements', 'routes/events.tsx'),
 
         route('parametres', 'routes/settings.tsx', [
           index('routes/settings.index.tsx'),

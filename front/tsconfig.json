@@ -18,7 +18,6 @@
       "@categories": ["./app/modules/categories/index.ts"],
       "@merchants": ["./app/modules/merchants/index.ts"],
       "@accounts": ["./app/modules/accounts/index.ts"],
-      "@events": ["./app/modules/events/index.ts"],
       "@work": ["./app/modules/work/index.ts"],
       "@security": ["./app/security/index.ts"],
       "@services": ["./app/services/index.ts"],

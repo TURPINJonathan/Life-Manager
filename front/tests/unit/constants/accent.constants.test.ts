@@ -11,7 +11,7 @@ describe('resolveAccent', () => {
   it('maps section routes and inherits nested paths', () => {
     expect(resolveAccent('/comptes')).toBe(APP_ACCENT.accounts);
     expect(resolveAccent('/comptes/nouveau')).toBe(APP_ACCENT.accounts);
-    expect(resolveAccent('/evenements')).toBe(APP_ACCENT.events);
+    expect(resolveAccent('/travail')).toBe(APP_ACCENT.work);
     expect(resolveAccent('/parametres')).toBe(APP_ACCENT.settings);
   });
 

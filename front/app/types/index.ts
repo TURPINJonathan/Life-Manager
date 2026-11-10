@@ -10,7 +10,7 @@ export type AuthUser = {
   roles: string[];
 };
 
-export type { CreateEntry, INavAction, INavItem } from './navigation.types';
+export type { INavItem } from './navigation.types';
 export type {
   Account,
   Category,
