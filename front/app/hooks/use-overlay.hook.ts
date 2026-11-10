@@ -8,6 +8,8 @@ const APP_SCROLL_SELECTOR = '[data-app-scroll]';
 let scrollLockCount = 0;
 let lockedScrollElement: HTMLElement | null = null;
 let savedScrollOverflow = '';
+let savedBodyOverflow = '';
+let savedHtmlOverflow = '';
 const overlayStack: object[] = [];
 
 function getScrollContainer(): HTMLElement {
@@ -20,15 +22,48 @@ function lockScroll(): void {
     lockedScrollElement = getScrollContainer();
     savedScrollOverflow = lockedScrollElement.style.overflow;
     lockedScrollElement.style.overflow = 'hidden';
+    // PWA / mobile : verrouiller aussi html+body évite un fond scrollable
+    // et un déblocage raté si le conteneur data-app-scroll est remplacé au reload.
+    savedBodyOverflow = document.body.style.overflow;
+    savedHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
   }
   scrollLockCount += 1;
 }
 
 function unlockScroll(): void {
   scrollLockCount = Math.max(0, scrollLockCount - 1);
-  if (scrollLockCount === 0 && lockedScrollElement !== null) {
+  if (scrollLockCount !== 0) return;
+
+  if (lockedScrollElement !== null) {
     lockedScrollElement.style.overflow = savedScrollOverflow;
     lockedScrollElement = null;
+    savedScrollOverflow = '';
+  }
+  document.body.style.overflow = savedBodyOverflow;
+  document.documentElement.style.overflow = savedHtmlOverflow;
+  savedBodyOverflow = '';
+  savedHtmlOverflow = '';
+
+  // Filet de sécurité : conteneur remounté pendant le lock (reload après save).
+  for (const node of document.querySelectorAll<HTMLElement>(APP_SCROLL_SELECTOR)) {
+    if (node.style.overflow === 'hidden') {
+      node.style.overflow = '';
+    }
+  }
+}
+
+function restoreFocus(element: HTMLElement | null): void {
+  if (!element?.isConnected) return;
+  // Sur tactile / PWA standalone, focus() après fermeture de dialog peut
+  // figer les interactions (clavier virtuel + scroll lock).
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  if (coarse) return;
+  try {
+    element.focus({ preventScroll: true });
+  } catch {
+    // Élément non focusable / navigateur strict — ignorer.
   }
 }
 
@@ -51,7 +86,17 @@ export function useOverlay(isOpen: boolean, close: () => void, containerRef?: Re
     const container = containerRef?.current;
     if (container) {
       const focusable = getFocusable(container);
-      (container.querySelector<HTMLElement>(AUTOFOCUS_SELECTOR) ?? focusable[0] ?? container).focus();
+      const target = container.querySelector<HTMLElement>(AUTOFOCUS_SELECTOR) ?? focusable[0] ?? container;
+      const coarse = window.matchMedia('(pointer: coarse)').matches;
+      const opensKeyboard = target.matches('input, textarea, select, [contenteditable="true"]');
+      // PWA mobile : éviter d’ouvrir le clavier à l’ouverture du dialog (gel au close).
+      if (!(coarse && opensKeyboard)) {
+        try {
+          target.focus({ preventScroll: true });
+        } catch {
+          // ignore
+        }
+      }
     }
 
     function onKey(event: KeyboardEvent): void {
@@ -87,7 +132,7 @@ export function useOverlay(isOpen: boolean, close: () => void, containerRef?: Re
       const index = overlayStack.indexOf(token);
       if (index !== -1) overlayStack.splice(index, 1);
       unlockScroll();
-      previouslyFocused?.focus?.();
+      restoreFocus(previouslyFocused);
     };
   }, [isOpen, containerRef]);
 }

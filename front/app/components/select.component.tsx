@@ -204,6 +204,8 @@ export function Select({
       return;
     }
     if (!searchable) return;
+    // Sur tactile, l’autofocus ouvre le clavier et contribue aux gels PWA après fermeture.
+    if (window.matchMedia('(pointer: coarse)').matches) return;
     const frame = requestAnimationFrame(() => searchRef.current?.focus());
     return () => cancelAnimationFrame(frame);
   }, [isOpen, searchable]);

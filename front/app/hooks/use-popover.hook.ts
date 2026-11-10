@@ -39,7 +39,14 @@ export function usePopover(
     return () => {
       document.removeEventListener('keydown', onKeyDown, true);
       document.removeEventListener('pointerdown', onPointerDown);
-      anchor?.focus?.();
+      // Évite le gel PWA mobile après fermeture (focus + clavier virtuel).
+      if (anchor?.isConnected && !window.matchMedia('(pointer: coarse)').matches) {
+        try {
+          anchor.focus({ preventScroll: true });
+        } catch {
+          // ignore
+        }
+      }
     };
   }, [isOpen, close, panelRef, anchorRef]);
 }
