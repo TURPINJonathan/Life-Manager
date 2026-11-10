@@ -6,7 +6,7 @@
     "node": ">=22.22.0"
   },
   "scripts": {
-    "dev": "react-router dev --host 0.0.0.0 --port 9200",
+    "dev": "cd ../api && make up && cd ../front && react-router dev --host 0.0.0.0 --port 9200",
     "build": "react-router build",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
