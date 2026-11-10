@@ -67,7 +67,7 @@ import {
   toastSuccess,
 } from '@utils';
 
-import { buildCategorySelectOptions, defaultCategoryId } from './category-select-options';
+import { buildCategorySelectOptions } from './category-select-options';
 import { ForecastPanel, type ForecastChromeActions } from './forecast-panel.component';
 import { buildMerchantSelectOptions, favoriteMerchantIdForCategory } from './merchant-select-options';
 import { SubAccountSwitcher } from './sub-account-switcher.component';
@@ -238,11 +238,9 @@ export function AccountLedgerPage() {
   }, [view, ledger?.hasMore, ledger?.nextOffset, ledger?.transactions.length]);
 
   const openCreate = () => {
-    const nextCategoryId = defaultCategoryId(categories);
-    const nextCategory = categories.find((category) => category.id === nextCategoryId);
     form.reset({
-      categoryId: nextCategoryId,
-      merchantId: favoriteMerchantIdForCategory(nextCategory),
+      categoryId: '',
+      merchantId: '',
       operationDate: todayIsoLocal(),
       effectiveDate: '',
       paymentMethod: 'card',
@@ -393,11 +391,9 @@ export function AccountLedgerPage() {
       }
 
       if (mode === 'new' && isCreate) {
-        const nextCategoryId = defaultCategoryId(categories);
-        const nextCategory = categories.find((item) => item.id === nextCategoryId);
         form.reset({
-          categoryId: nextCategoryId,
-          merchantId: favoriteMerchantIdForCategory(nextCategory),
+          categoryId: '',
+          merchantId: '',
           operationDate: todayIsoLocal(),
           effectiveDate: '',
           paymentMethod: 'card',
@@ -439,11 +435,9 @@ export function AccountLedgerPage() {
       setRemoveAttachment(false);
       return;
     }
-    const nextCategoryId = defaultCategoryId(categories);
-    const nextCategory = categories.find((category) => category.id === nextCategoryId);
     form.reset({
-      categoryId: nextCategoryId,
-      merchantId: favoriteMerchantIdForCategory(nextCategory),
+      categoryId: '',
+      merchantId: '',
       operationDate: todayIsoLocal(),
       effectiveDate: '',
       paymentMethod: 'card',
@@ -583,15 +577,28 @@ export function AccountLedgerPage() {
 
                 {view === 'budget' && budgetActions ? (
                   <>
-                    <Tooltip content="Vue tableur — édition groupée">
-                      <IconButton
-                        variant={ICON_BUTTON_VARIANT.ghost}
-                        icon="table_rows"
-                        aria-label="Vue tableur"
-                        disabled={budgetActions.busy}
-                        onClick={budgetActions.onOpenSpreadsheet}
-                      />
-                    </Tooltip>
+                    {budgetActions.canProject ? (
+                      <Tooltip
+                        content={
+                          budgetActions.projectionActive
+                            ? 'Projection active — cliquer pour ajuster'
+                            : 'Projection locale (solde ou jour)'
+                        }
+                      >
+                        <IconButton
+                          ref={budgetActions.projectionAnchorRef}
+                          variant={ICON_BUTTON_VARIANT.ghost}
+                          icon="query_stats"
+                          aria-label="Projection locale"
+                          aria-pressed={budgetActions.projectionActive || budgetActions.projectionOpen}
+                          disabled={budgetActions.busy}
+                          className={
+                            budgetActions.projectionActive || budgetActions.projectionOpen ? 'text-accent' : undefined
+                          }
+                          onClick={budgetActions.onToggleProjection}
+                        />
+                      </Tooltip>
+                    ) : null}
                     {budgetActions.canDelete ? (
                       <Button
                         type="button"
@@ -642,6 +649,8 @@ export function AccountLedgerPage() {
           <ForecastPanel
             subAccountId={subAccountId}
             categories={categories}
+            balanceCents={ledger.subAccount.balanceCents}
+            provisionalBalanceCents={ledger.subAccount.provisionalBalanceCents}
             yearMonth={budgetMonth}
             onYearMonthChange={setBudgetMonth}
             focusLineId={focusLineId}

@@ -1,4 +1,4 @@
-import { currentYearMonth } from '@constants';
+import { currentYearMonth, shiftYearMonth } from '@constants';
 import type { CategoryKind, ForecastStats, ForecastStatsCategory, ForecastTimelinePoint, SubAccount } from '@app-types';
 
 import { compareForecastProgress, isExpenseStatsRow } from './forecast-budget.utils';
@@ -100,14 +100,17 @@ export function aggregateStatsCategories(rows: ForecastStatsCategory[]): Aggrega
 }
 
 export function toCategoryBars(rows: AggregatedStatsCategory[]): CategoryBarItem[] {
-  return rows.map((row) => ({
-    key: row.key,
-    name: row.categoryName,
-    color: row.categoryColor,
-    plannedCents: row.plannedAmountCents,
-    actualCents: row.actualAmountCents,
-    isExpense: isExpenseStatsRow(row),
-  }));
+  // Les catégories 100 % flexibles (sans jour) sont lissées dans la courbe, pas en barres.
+  return rows
+    .filter((row) => row.scheduledDays.length > 0)
+    .map((row) => ({
+      key: row.key,
+      name: row.categoryName,
+      color: row.categoryColor,
+      plannedCents: row.plannedAmountCents,
+      actualCents: row.actualAmountCents,
+      isExpense: isExpenseStatsRow(row),
+    }));
 }
 
 /** Totaux catégories combinés pour le dashboard (tous sous-comptes). */
@@ -184,6 +187,131 @@ export function monthDisplayBalanceCents(stats: ForecastStats | null | undefined
   if (stats.meta.isPastMonth) return stats.balances.endOfMonthActualCents;
   if (stats.meta.isFutureMonth) return stats.balances.projectedRealisticCents;
   return liveBalanceCents;
+}
+
+/**
+ * Recalcule soldes + timeline à partir d’un nouveau solde d’ouverture (what-if front-only).
+ * Ne touche pas au solde pointé live ni à l’écart plan/réalisé.
+ */
+export function rebaseForecastStats(stats: ForecastStats, newOpeningCents: number): ForecastStats {
+  const delta = newOpeningCents - stats.balances.openingCents;
+  if (delta === 0) return stats;
+
+  return {
+    ...stats,
+    balances: {
+      ...stats.balances,
+      openingCents: newOpeningCents,
+      endOfMonthActualCents: stats.balances.endOfMonthActualCents + delta,
+      projectedBudgetCents: stats.balances.projectedBudgetCents + delta,
+      projectedRealisticCents: stats.balances.projectedRealisticCents + delta,
+    },
+    timeline: stats.timeline.map((point) => ({
+      ...point,
+      budgetBalanceCents: point.budgetBalanceCents + delta,
+      realisticBalanceCents: point.realisticBalanceCents + delta,
+      actualBalanceCents: point.actualBalanceCents == null ? null : point.actualBalanceCents + delta,
+    })),
+  };
+}
+
+/**
+ * Affiche soldes + remplissage des lignes à un jour donné (what-if front-only).
+ * — Échéance datée : 100 % si due, sinon 0 %.
+ * — Flexible : lissé linéairement (jour / jours du mois).
+ * Ajuste aussi `daysElapsed` pour le curseur du graphique.
+ */
+export function focusForecastStatsOnDay(stats: ForecastStats, day: number): ForecastStats {
+  const daysInMonth = stats.meta.daysInMonth;
+  const clamped = Math.min(Math.max(day, 1), daysInMonth);
+  const point = stats.timeline.find((row) => row.day === clamped);
+  if (!point) return stats;
+
+  const categories = stats.categories.map((row) => {
+    if (row.scheduledDay === null) {
+      const ratio = clamped / daysInMonth;
+      const actualAmountCents = Math.round(row.plannedAmountCents * ratio);
+      const actualSignedCents = Math.round(row.plannedSignedCents * ratio);
+      const remainingCents = Math.max(0, row.plannedAmountCents - actualAmountCents);
+      const consumptionPercent =
+        row.plannedAmountCents > 0 ? Math.round((actualAmountCents / row.plannedAmountCents) * 100) : 0;
+      return {
+        ...row,
+        actualAmountCents,
+        actualSignedCents,
+        remainingCents,
+        consumptionPercent,
+        overBudget: false,
+      };
+    }
+
+    const dueDay = Math.min(Math.max(row.scheduledDay, 1), daysInMonth);
+    if (dueDay > clamped) {
+      return {
+        ...row,
+        actualAmountCents: 0,
+        actualSignedCents: 0,
+        remainingCents: row.plannedAmountCents,
+        consumptionPercent: 0,
+        overBudget: false,
+      };
+    }
+
+    return {
+      ...row,
+      actualAmountCents: row.plannedAmountCents,
+      actualSignedCents: row.plannedSignedCents,
+      remainingCents: 0,
+      consumptionPercent: row.plannedAmountCents > 0 ? 100 : 0,
+      overBudget: false,
+    };
+  });
+
+  let actualIncomeCents = 0;
+  let actualExpenseCents = 0;
+  for (const row of categories) {
+    if (isExpenseStatsRow(row)) {
+      actualExpenseCents += row.actualAmountCents;
+    } else {
+      actualIncomeCents += row.actualAmountCents;
+    }
+  }
+  const actualNetCents = actualIncomeCents - actualExpenseCents;
+
+  return {
+    ...stats,
+    balances: {
+      ...stats.balances,
+      // Timeline API : flexibles déjà lissés jour par jour.
+      projectedBudgetCents: point.budgetBalanceCents,
+      projectedRealisticCents: point.realisticBalanceCents,
+      endOfMonthActualCents: stats.balances.openingCents + actualNetCents,
+      varianceBudgetVsActualNetCents: stats.totals.plannedNetCents - actualNetCents,
+    },
+    totals: {
+      ...stats.totals,
+      actualIncomeCents,
+      actualExpenseCents,
+      actualNetCents,
+    },
+    categories,
+    meta: {
+      ...stats.meta,
+      daysElapsed: clamped,
+      daysRemaining: Math.max(0, daysInMonth - clamped),
+    },
+  };
+}
+
+/** Mois strictement après `fromYearMonth` et strictement avant `toYearMonth`. */
+export function yearMonthsStrictlyBetween(fromYearMonth: string, toYearMonth: string): string[] {
+  const months: string[] = [];
+  let cursor = shiftYearMonth(fromYearMonth, 1);
+  while (cursor < toYearMonth) {
+    months.push(cursor);
+    cursor = shiftYearMonth(cursor, 1);
+  }
+  return months;
 }
 
 export function budgetStatusLabel(summary: SubForecastSummary | undefined): 'ok' | 'over' | 'missing' {
@@ -300,17 +428,22 @@ export type UpcomingDeadline = {
   subAccountName: string;
 };
 
-function deadlineFromRow(sub: FlatSubAccount, row: ForecastStatsCategory, daysInMonth: number): UpcomingDeadline {
-  const scheduled = row.scheduledDay;
-  const rawDay = scheduled ?? daysInMonth;
-  const day = Math.min(Math.max(rawDay, 1), daysInMonth);
+function deadlineFromRow(
+  sub: FlatSubAccount,
+  row: ForecastStatsCategory,
+  daysInMonth: number,
+): UpcomingDeadline | null {
+  // Date flexible = pas d’échéance calendaire.
+  if (row.scheduledDay === null) return null;
+
+  const day = Math.min(Math.max(row.scheduledDay, 1), daysInMonth);
   const isExpense = row.categoryKind === 'expense' || (row.categoryKind === 'both' && row.flow === 'debit');
 
   return {
     key: `${sub.id}-${row.lineId}`,
     lineId: row.lineId,
     day,
-    monthEnd: scheduled == null,
+    monthEnd: false,
     categoryName: row.categoryName,
     categoryColor: row.categoryColor,
     categoryIcon: row.categoryIcon,
@@ -340,7 +473,8 @@ export function collectMonthDeadlines(
     if (!stats?.hasForecast) continue;
     const daysInMonth = stats.meta.daysInMonth;
     for (const row of stats.categories) {
-      items.push(deadlineFromRow(sub, row, daysInMonth));
+      const item = deadlineFromRow(sub, row, daysInMonth);
+      if (item) items.push(item);
     }
   }
 

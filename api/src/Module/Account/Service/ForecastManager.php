@@ -848,8 +848,8 @@ final class ForecastManager
                     'amountCents'   => $signed,
                 ];
                 if (null === $day) {
+                    // Flexible : pas d’événement daté — lissé sur le mois (courbe budget).
                     $unscheduledPlanned += $signed;
-                    $plannedEventsByDay[$daysInMonth][] = $event;
                     continue;
                 }
                 $clamped = min($daysInMonth, max(1, $day));
@@ -857,8 +857,8 @@ final class ForecastManager
                 $plannedEventsByDay[$clamped][] = $event;
             }
         }
-        if (0 !== $unscheduledPlanned) {
-            $plannedByDay[$daysInMonth] = ($plannedByDay[$daysInMonth] ?? 0) + $unscheduledPlanned;
+        foreach ($this->distributeCentsByDay($unscheduledPlanned, 1, $daysInMonth) as $day => $cents) {
+            $plannedByDay[$day] = ($plannedByDay[$day] ?? 0) + $cents;
         }
 
         /** @var array<int, int> $futurePlannedByDay */
@@ -872,7 +872,11 @@ final class ForecastManager
             $remainingSigned = $signed < 0 ? -$remainingAbs : $remainingAbs;
             $day = $row['scheduledDay'] ?? null;
             if (!\is_int($day)) {
-                $futurePlannedByDay[$daysInMonth] = ($futurePlannedByDay[$daysInMonth] ?? 0) + $remainingSigned;
+                // Reste flexible : lissé d’aujourd’hui (ou jour 1) à la fin du mois.
+                $from = max(1, $daysElapsed > 0 ? $daysElapsed : 1);
+                foreach ($this->distributeCentsByDay($remainingSigned, $from, $daysInMonth) as $spreadDay => $cents) {
+                    $futurePlannedByDay[$spreadDay] = ($futurePlannedByDay[$spreadDay] ?? 0) + $cents;
+                }
                 continue;
             }
             $clamped = min($daysInMonth, max(1, $day));
@@ -927,6 +931,29 @@ final class ForecastManager
         }
 
         return $points;
+    }
+
+    /**
+     * Répartit un montant signé sur [fromDay, toDay] sans dérive (arrondi cumulatif).
+     *
+     * @return array<int, int> day => cents
+     */
+    private function distributeCentsByDay(int $totalCents, int $fromDay, int $toDay): array
+    {
+        if (0 === $totalCents || $fromDay > $toDay) {
+            return [];
+        }
+
+        $days = $toDay - $fromDay + 1;
+        $result = [];
+        $distributed = 0;
+        for ($i = 1; $i <= $days; ++$i) {
+            $target = (int) round($totalCents * $i / $days);
+            $result[$fromDay + $i - 1] = $target - $distributed;
+            $distributed = $target;
+        }
+
+        return $result;
     }
 
     private function requireOwned(string $id): MonthlyForecast

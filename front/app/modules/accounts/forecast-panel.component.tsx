@@ -1,7 +1,7 @@
-import { useEffect, useEffectEvent, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type RefObject } from 'react';
 
-import { Button, ConfirmDialog, Dialog, Icon, Tooltip } from '@components';
-import { BUTTON_VARIANT, DIALOG_SIZE, currentYearMonth, shiftYearMonth } from '@constants';
+import { Button, ConfirmDialog, Icon, Popover, Tooltip } from '@components';
+import { BUTTON_VARIANT, POPOVER_PLACEMENT, currentYearMonth, shiftYearMonth } from '@constants';
 import { CategoryQuickCreate } from '@categories';
 import {
   ApiError,
@@ -46,7 +46,6 @@ import {
 } from './forecast-budget.utils';
 import { ForecastCategoryDialog } from './forecast-category-dialog.component';
 import { ForecastCategoryOperationsDialog } from './forecast-category-operations-dialog.component';
-import { ForecastEditor, type ForecastDraftLine } from './forecast-editor.component';
 import {
   emptyLineForm,
   ForecastLineDialog,
@@ -54,14 +53,17 @@ import {
   type ForecastLineFormValues,
 } from './forecast-line-dialog.component';
 import { ForecastProgressTrack } from './forecast-progress.component';
+import { ForecastProjectionPopover, type ProjectionShortcut } from './forecast-projection-popover.component';
 import {
   aggregateStatsCategories,
   formatMonthLabel,
+  formatMonthShortLabel,
+  focusForecastStatsOnDay,
+  rebaseForecastStats,
   toCategoryBars,
+  yearMonthsStrictlyBetween,
   type AggregatedStatsCategory,
 } from './forecast.utils';
-
-type DraftLine = ForecastDraftLine;
 
 type LineDialogState =
   | null
@@ -71,6 +73,8 @@ type LineDialogState =
 type ForecastPanelProps = {
   subAccountId: string;
   categories: Category[];
+  balanceCents: number;
+  provisionalBalanceCents: number;
   onCategoryCreated?: (category: Category) => void;
   onChromeActionsChange?: (actions: ForecastChromeActions | null) => void;
   yearMonth?: string;
@@ -85,17 +89,23 @@ export type ForecastChromeActions = {
   monthLabel: string;
   onPrevMonth: () => void;
   onNextMonth: () => void;
-  onOpenSpreadsheet: () => void;
   canDelete: boolean;
   onDelete: () => void;
   canDuplicate: boolean;
   onDuplicate: () => void;
   previousMonthLabel: string;
+  canProject: boolean;
+  projectionActive: boolean;
+  projectionOpen: boolean;
+  onToggleProjection: () => void;
+  projectionAnchorRef: RefObject<HTMLButtonElement | null>;
 };
 
 export function ForecastPanel({
   subAccountId,
   categories,
+  balanceCents,
+  provisionalBalanceCents,
   onCategoryCreated,
   onChromeActionsChange,
   yearMonth: yearMonthProp,
@@ -124,9 +134,13 @@ export function ForecastPanel({
   const [lineDialog, setLineDialog] = useState<LineDialogState>(null);
   const [categoryDialogRow, setCategoryDialogRow] = useState<AggregatedStatsCategory | null>(null);
   const [operationsDialogRow, setOperationsDialogRow] = useState<AggregatedStatsCategory | null>(null);
-  const [spreadsheetOpen, setSpreadsheetOpen] = useState(false);
-  const [spreadsheetDraft, setSpreadsheetDraft] = useState<DraftLine[]>([]);
-  const [spreadsheetBaseline, setSpreadsheetBaseline] = useState<DraftLine[]>([]);
+  const [openingOverrideCents, setOpeningOverrideCents] = useState<number | null>(null);
+  const [projectionDay, setProjectionDay] = useState<number | null>(null);
+  const [projectionOpen, setProjectionOpen] = useState(false);
+  const [shortcutLoading, setShortcutLoading] = useState(false);
+  const [currentMonthStats, setCurrentMonthStats] = useState<ForecastStats | null>(null);
+  const [intermediatePlannedNetCents, setIntermediatePlannedNetCents] = useState(0);
+  const projectionAnchorRef = useRef<HTMLButtonElement | null>(null);
 
   const reload = async (month = yearMonth) => {
     if (!token) return;
@@ -146,9 +160,47 @@ export function ForecastPanel({
   };
 
   useEffect(() => {
+    setOpeningOverrideCents(null);
+    setProjectionDay(null);
+    setProjectionOpen(false);
+    setCurrentMonthStats(null);
+    setIntermediatePlannedNetCents(0);
     void reload(yearMonth);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, subAccountId, yearMonth]);
+
+  const liveMonth = currentYearMonth();
+  const canProject = Boolean(stats?.meta.isFutureMonth);
+
+  const loadProjectionShortcuts = useEffectEvent(async () => {
+    if (!token || !canProject) {
+      setCurrentMonthStats(null);
+      setIntermediatePlannedNetCents(0);
+      return;
+    }
+    setShortcutLoading(true);
+    try {
+      const current = await fetchForecastStats(token, subAccountId, liveMonth);
+      setCurrentMonthStats(current);
+      const intermediates = yearMonthsStrictlyBetween(liveMonth, yearMonth);
+      if (intermediates.length === 0) {
+        setIntermediatePlannedNetCents(0);
+        return;
+      }
+      const rows = await Promise.all(intermediates.map((month) => fetchForecastStats(token, subAccountId, month)));
+      setIntermediatePlannedNetCents(rows.reduce((sum, row) => sum + row.totals.plannedNetCents, 0));
+    } catch {
+      setCurrentMonthStats(null);
+      setIntermediatePlannedNetCents(0);
+    } finally {
+      setShortcutLoading(false);
+    }
+  });
+
+  useEffect(() => {
+    if (!projectionOpen || !canProject) return;
+    void loadProjectionShortcuts();
+  }, [projectionOpen, canProject, subAccountId, yearMonth, liveMonth]);
 
   const handleFocusLine = useEffectEvent(() => {
     onFocusLineHandled?.();
@@ -199,59 +251,6 @@ export function ForecastPanel({
     }
   };
 
-  const openSpreadsheet = () => {
-    const initial: DraftLine[] = forecast
-      ? forecast.lines.map((line) => ({
-          key: line.id,
-          categoryId: line.categoryId,
-          amount: centsToInput(line.plannedAmountCents),
-          flow: line.flow ?? 'debit',
-          scheduledDay: line.scheduledDay ?? null,
-        }))
-      : [
-          {
-            key: crypto.randomUUID(),
-            categoryId: '',
-            amount: '',
-            flow: 'debit' as const,
-            scheduledDay: null,
-          },
-        ];
-    setSpreadsheetDraft(initial);
-    setSpreadsheetBaseline(initial.map((row) => ({ ...row })));
-    setSpreadsheetOpen(true);
-  };
-
-  const spreadsheetToInputs = (): ForecastLineInput[] | null => {
-    const lines: ForecastLineInput[] = [];
-    for (const row of spreadsheetDraft) {
-      if (!row.categoryId) {
-        setError('Chaque ligne doit avoir une catégorie.');
-        return null;
-      }
-      const cents = parseEurosToCents(row.amount);
-      if (cents === null || cents < 0) {
-        setError('Montants invalides.');
-        return null;
-      }
-      const category = categories.find((item) => item.id === row.categoryId);
-      lines.push({
-        categoryId: row.categoryId,
-        plannedAmountCents: cents,
-        flow: category?.kind === 'both' ? row.flow : null,
-        scheduledDay: row.scheduledDay,
-      });
-    }
-    return lines;
-  };
-
-  const saveSpreadsheet = async () => {
-    const lines = spreadsheetToInputs();
-    if (!lines) return;
-    await persistLines(lines);
-    setSpreadsheetOpen(false);
-  };
-
   const onDuplicate = async () => {
     if (!token) return;
     setBusy(true);
@@ -286,6 +285,69 @@ export function ForecastPanel({
   };
 
   const prevMonthLabel = useMemo(() => formatMonthLabel(shiftYearMonth(yearMonth, -1)), [yearMonth]);
+  const projectionActive = openingOverrideCents !== null || projectionDay !== null;
+  const displayStats = useMemo(() => {
+    if (!stats) return null;
+    let next = stats;
+    if (openingOverrideCents !== null) {
+      next = rebaseForecastStats(next, openingOverrideCents);
+    }
+    if (projectionDay !== null) {
+      next = focusForecastStatsOnDay(next, projectionDay);
+    }
+    return next;
+  }, [stats, openingOverrideCents, projectionDay]);
+
+  const projectionShortcuts = useMemo((): ProjectionShortcut[] => {
+    if (!canProject) return [];
+    const items: ProjectionShortcut[] = [
+      {
+        id: 'provisional',
+        label: 'Solde provisoire actuel',
+        hint: 'Pointé + en attente',
+        cents: provisionalBalanceCents,
+      },
+      {
+        id: 'pointed',
+        label: 'Solde pointé actuel',
+        hint: 'Confirmé à ce jour',
+        cents: balanceCents,
+      },
+    ];
+    if (currentMonthStats) {
+      const currentLabel = formatMonthShortLabel(liveMonth);
+      items.push({
+        id: 'current-realistic',
+        label: `Fin estimée — ${currentLabel}`,
+        hint: 'Mois en cours, réaliste',
+        cents: currentMonthStats.balances.projectedRealisticCents,
+      });
+      items.push({
+        id: 'current-budget',
+        label: `Fin si budget tenu — ${currentLabel}`,
+        hint: 'Mois en cours, plan complet',
+        cents: currentMonthStats.balances.projectedBudgetCents,
+      });
+      const intermediates = yearMonthsStrictlyBetween(liveMonth, yearMonth);
+      if (intermediates.length > 0) {
+        items.push({
+          id: 'chained-entry',
+          label: `Entrée ${formatMonthShortLabel(yearMonth)}`,
+          hint: `Fin estimée ${currentLabel} + plans intermédiaires`,
+          cents: currentMonthStats.balances.projectedRealisticCents + intermediatePlannedNetCents,
+        });
+      }
+    }
+    return items;
+  }, [
+    canProject,
+    provisionalBalanceCents,
+    balanceCents,
+    currentMonthStats,
+    liveMonth,
+    yearMonth,
+    intermediatePlannedNetCents,
+  ]);
 
   const publishChromeActions = useEffectEvent(() => {
     if (!onChromeActionsChange) return;
@@ -294,7 +356,6 @@ export function ForecastPanel({
       monthLabel: formatMonthLabel(yearMonth),
       onPrevMonth: () => setYearMonth((value) => shiftYearMonth(value, -1)),
       onNextMonth: () => setYearMonth((value) => shiftYearMonth(value, 1)),
-      onOpenSpreadsheet: openSpreadsheet,
       canDelete: Boolean(forecast),
       onDelete: () => setDeleteOpen(true),
       canDuplicate: !forecast,
@@ -302,17 +363,25 @@ export function ForecastPanel({
         void onDuplicate();
       },
       previousMonthLabel: prevMonthLabel,
+      canProject,
+      projectionActive,
+      projectionOpen,
+      onToggleProjection: () => setProjectionOpen((open) => !open),
+      projectionAnchorRef,
     });
   });
 
   useEffect(() => {
     publishChromeActions();
     return () => onChromeActionsChange?.(null);
-  }, [onChromeActionsChange, forecast, busy, yearMonth, prevMonthLabel]);
-  const aggregatedCategories = useMemo(() => aggregateStatsCategories(stats?.categories ?? []), [stats?.categories]);
+  }, [onChromeActionsChange, forecast, busy, yearMonth, prevMonthLabel, canProject, projectionActive, projectionOpen]);
+  const aggregatedCategories = useMemo(
+    () => aggregateStatsCategories(displayStats?.categories ?? []),
+    [displayStats?.categories],
+  );
   const previousByKey = useMemo(() => {
     const map = new Map<string, ForecastStatsPreviousCategory>();
-    for (const row of stats?.previousMonth?.categories ?? []) {
+    for (const row of displayStats?.previousMonth?.categories ?? []) {
       map.set(previousMonthKey(row.categoryId, row.flow), row);
       // Fallback sans flow (catégories expense/income).
       if (!row.flow) {
@@ -320,7 +389,7 @@ export function ForecastPanel({
       }
     }
     return map;
-  }, [stats?.previousMonth?.categories]);
+  }, [displayStats?.previousMonth?.categories]);
   const incomeCategories = useMemo(
     () => aggregatedCategories.filter((row) => !isExpenseStatsRow(row)),
     [aggregatedCategories],
@@ -330,43 +399,13 @@ export function ForecastPanel({
     [aggregatedCategories],
   );
   const incomeOrphans = useMemo(
-    () => (stats?.previousMonth?.orphans ?? []).filter((row) => !row.isExpense),
-    [stats?.previousMonth?.orphans],
+    () => (displayStats?.previousMonth?.orphans ?? []).filter((row) => !row.isExpense),
+    [displayStats?.previousMonth?.orphans],
   );
   const expenseOrphans = useMemo(
-    () => (stats?.previousMonth?.orphans ?? []).filter((row) => row.isExpense),
-    [stats?.previousMonth?.orphans],
+    () => (displayStats?.previousMonth?.orphans ?? []).filter((row) => row.isExpense),
+    [displayStats?.previousMonth?.orphans],
   );
-  const spreadsheetOrphans = stats?.previousMonth?.orphans ?? [];
-
-  const spreadsheetTotals = useMemo(() => {
-    let incomeCents = 0;
-    let expenseCents = 0;
-    for (const row of spreadsheetDraft) {
-      const cents = parseEurosToCents(row.amount);
-      if (cents === null || cents < 0) continue;
-      const category = categories.find((item) => item.id === row.categoryId);
-      const isCredit = category?.kind === 'income' || (category?.kind === 'both' && row.flow === 'credit');
-      if (isCredit) incomeCents += cents;
-      else expenseCents += cents;
-    }
-    return { incomeCents, expenseCents, netCents: incomeCents - expenseCents, count: spreadsheetDraft.length };
-  }, [categories, spreadsheetDraft]);
-
-  const spreadsheetDirty = useMemo(() => {
-    if (spreadsheetDraft.length !== spreadsheetBaseline.length) return true;
-    return spreadsheetDraft.some((row, index) => {
-      const baseline = spreadsheetBaseline[index];
-      return (
-        !baseline ||
-        row.key !== baseline.key ||
-        row.categoryId !== baseline.categoryId ||
-        row.amount !== baseline.amount ||
-        row.flow !== baseline.flow ||
-        row.scheduledDay !== baseline.scheduledDay
-      );
-    });
-  }, [spreadsheetDraft, spreadsheetBaseline]);
 
   const addOrphanFromPrevious = (orphan: ForecastStatsPreviousCategory) => {
     const tone: BudgetTone = orphan.isExpense ? 'expense' : 'income';
@@ -576,56 +615,60 @@ export function ForecastPanel({
             </div>
           ) : null}
 
-          {stats && (
+          {displayStats && (
             <div className="grid gap-3 lg:grid-cols-2 lg:items-stretch">
               <div className="grid h-full min-h-64 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 sm:grid-rows-2">
                 <StatCard
                   label="Début de mois"
-                  hint="Solde au 1er (date d’opération)"
+                  hint={
+                    openingOverrideCents !== null
+                      ? 'Projection locale (non enregistrée)'
+                      : 'Solde au 1er (date d’opération)'
+                  }
                   icon="event"
                   tone="muted"
-                  value={stats.balances.openingCents}
+                  value={displayStats.balances.openingCents}
                 />
                 <StatCard
-                  label="Si budget tenu"
-                  hint="Début + plan complet"
+                  label={projectionDay !== null ? `Budget au ${projectionDay}` : 'Si budget tenu'}
+                  hint={projectionDay !== null ? 'Solde si le plan est tenu jusqu’à ce jour' : 'Début + plan complet'}
                   icon="calendar_month"
                   tone="accent"
-                  value={stats.balances.projectedBudgetCents}
+                  value={displayStats.balances.projectedBudgetCents}
                 />
                 <StatCard
-                  label="Fin estimée"
-                  hint="Réalisé + reste du plan"
+                  label={projectionDay !== null ? `Estimé au ${projectionDay}` : 'Fin estimée'}
+                  hint={projectionDay !== null ? 'Solde réaliste à ce jour' : 'Réalisé + reste du plan'}
                   icon="trending_up"
                   tone="accent"
-                  value={stats.balances.projectedRealisticCents}
+                  value={displayStats.balances.projectedRealisticCents}
                 />
                 <StatCard
                   label="Solde pointé"
                   hint="Confirmé à ce jour (date effective)"
                   icon="account_balance_wallet"
                   tone="brand"
-                  value={stats.balances.currentCents}
+                  value={displayStats.balances.currentCents}
                 />
                 <StatCard
-                  label="Solde réalisé"
-                  hint="Début + opérations du mois"
+                  label={projectionDay !== null ? `Réalisé au ${projectionDay}` : 'Solde réalisé'}
+                  hint={projectionDay !== null ? 'Début + échéances dues (plan tenu)' : 'Début + opérations du mois'}
                   icon="flag"
                   tone="success"
-                  value={stats.balances.endOfMonthActualCents}
+                  value={displayStats.balances.endOfMonthActualCents}
                 />
                 <StatCard
                   label="Écart au plan"
-                  hint="Plan − réalisé (net)"
+                  hint={projectionDay !== null ? 'Plan mois − échéances dues à ce jour' : 'Plan − réalisé (net)'}
                   icon="compare_arrows"
                   tone="variance"
-                  value={stats.balances.varianceBudgetVsActualNetCents}
+                  value={displayStats.balances.varianceBudgetVsActualNetCents}
                 />
               </div>
-              {stats.timeline.length > 0 ? (
+              {displayStats.timeline.length > 0 ? (
                 <BalanceTimelineChart
-                  points={stats.timeline}
-                  daysElapsed={stats.meta.daysElapsed}
+                  points={displayStats.timeline}
+                  daysElapsed={displayStats.meta.daysElapsed}
                   categoryBars={toCategoryBars(aggregatedCategories)}
                   className="min-h-64 lg:h-full"
                 />
@@ -637,18 +680,18 @@ export function ForecastPanel({
             </div>
           )}
 
-          {stats && (
+          {displayStats && (
             <div className="grid gap-4 lg:grid-cols-2">
               <ForecastCategoryColumn
                 title="Revenus"
                 icon="arrow_upward"
-                plannedCents={stats.totals.plannedIncomeCents}
-                actualCents={stats.totals.actualIncomeCents}
-                previousPlannedCents={stats.previousMonth?.totals.plannedIncomeCents ?? 0}
-                previousActualCents={stats.previousMonth?.totals.actualIncomeCents ?? 0}
+                plannedCents={displayStats.totals.plannedIncomeCents}
+                actualCents={displayStats.totals.actualIncomeCents}
+                previousPlannedCents={displayStats.previousMonth?.totals.plannedIncomeCents ?? 0}
+                previousActualCents={displayStats.previousMonth?.totals.actualIncomeCents ?? 0}
                 previousMonthLabel={prevMonthLabel}
                 tone="income"
-                planNetCents={stats.totals.plannedNetCents}
+                planNetCents={displayStats.totals.plannedNetCents}
                 rows={incomeCategories}
                 orphans={incomeOrphans}
                 previousByKey={previousByKey}
@@ -661,13 +704,13 @@ export function ForecastPanel({
               <ForecastCategoryColumn
                 title="Dépenses"
                 icon="arrow_downward"
-                plannedCents={stats.totals.plannedExpenseCents}
-                actualCents={stats.totals.actualExpenseCents}
-                previousPlannedCents={stats.previousMonth?.totals.plannedExpenseCents ?? 0}
-                previousActualCents={stats.previousMonth?.totals.actualExpenseCents ?? 0}
+                plannedCents={displayStats.totals.plannedExpenseCents}
+                actualCents={displayStats.totals.actualExpenseCents}
+                previousPlannedCents={displayStats.previousMonth?.totals.plannedExpenseCents ?? 0}
+                previousActualCents={displayStats.previousMonth?.totals.actualExpenseCents ?? 0}
                 previousMonthLabel={prevMonthLabel}
                 tone="expense"
-                planNetCents={stats.totals.plannedNetCents}
+                planNetCents={displayStats.totals.plannedNetCents}
                 rows={expenseCategories}
                 orphans={expenseOrphans}
                 previousByKey={previousByKey}
@@ -680,11 +723,11 @@ export function ForecastPanel({
             </div>
           )}
 
-          {stats && stats.unbudgeted.items.length > 0 && (
+          {displayStats && displayStats.unbudgeted.items.length > 0 && (
             <div className="rounded-panel border border-border-subtle bg-elevated p-3">
               <p className="text-control font-medium text-fg-secondary">Hors budget</p>
               <ul className="mt-2 space-y-1">
-                {stats.unbudgeted.items.map((item) => (
+                {displayStats.unbudgeted.items.map((item) => (
                   <li key={item.categoryId} className="flex justify-between text-body">
                     <span>{item.categoryName ?? 'Catégorie'}</span>
                     <span className={signedAmountClass(item.actualSignedCents)}>
@@ -696,10 +739,10 @@ export function ForecastPanel({
             </div>
           )}
 
-          {stats && (
+          {displayStats && (
             <p className="text-control text-fg-muted">
-              Jour {stats.meta.daysElapsed}/{stats.meta.daysInMonth}
-              {stats.meta.daysRemaining > 0 ? ` · ${stats.meta.daysRemaining} restant(s)` : ''}
+              Jour {displayStats.meta.daysElapsed}/{displayStats.meta.daysInMonth}
+              {displayStats.meta.daysRemaining > 0 ? ` · ${displayStats.meta.daysRemaining} restant(s)` : ''}
             </p>
           )}
         </>
@@ -711,7 +754,7 @@ export function ForecastPanel({
         tone={lineDialogTone}
         title={lineDialogTitle}
         categories={categories}
-        daysInMonth={stats?.meta.daysInMonth}
+        daysInMonth={displayStats?.meta.daysInMonth}
         busy={busy}
         initial={lineDialogInitial}
         editContext={lineDialogEditContext}
@@ -782,48 +825,6 @@ export function ForecastPanel({
         />
       ) : null}
 
-      <Dialog
-        isOpen={spreadsheetOpen}
-        onClose={() => setSpreadsheetOpen(false)}
-        title={`Vue tableur — ${formatMonthLabel(yearMonth)}`}
-        icon="table_rows"
-        size={DIALOG_SIZE.full}
-      >
-        <ForecastEditor
-          isNew={!forecast}
-          busy={busy}
-          draft={spreadsheetDraft}
-          categories={categories}
-          daysInMonth={stats?.meta.daysInMonth}
-          totals={spreadsheetTotals}
-          previousByKey={previousByKey}
-          previousMonthLabel={prevMonthLabel}
-          orphans={spreadsheetOrphans}
-          canReset={spreadsheetDirty}
-          onCancel={() => setSpreadsheetOpen(false)}
-          onReset={() => setSpreadsheetDraft(spreadsheetBaseline.map((row) => ({ ...row })))}
-          onSave={() => void saveSpreadsheet()}
-          onAdd={() =>
-            setSpreadsheetDraft((rows) => [
-              ...rows,
-              {
-                key: crypto.randomUUID(),
-                categoryId: '',
-                amount: '',
-                flow: 'debit',
-                scheduledDay: null,
-              },
-            ])
-          }
-          onRemove={(key) => setSpreadsheetDraft((rows) => rows.filter((item) => item.key !== key))}
-          onPatch={(key, patch) =>
-            setSpreadsheetDraft((rows) => rows.map((row) => (row.key === key ? { ...row, ...patch } : row)))
-          }
-          onCreateCategory={() => setCategoryCreateOpen(true)}
-          onAddOrphan={addOrphanFromPrevious}
-        />
-      </Dialog>
-
       <CategoryQuickCreate
         open={categoryCreateOpen}
         onClose={() => setCategoryCreateOpen(false)}
@@ -832,6 +833,36 @@ export function ForecastPanel({
           setCategoryCreateOpen(false);
         }}
       />
+
+      <Popover
+        isOpen={projectionOpen && canProject}
+        onClose={() => setProjectionOpen(false)}
+        anchorRef={projectionAnchorRef}
+        placement={POPOVER_PLACEMENT.bottomEnd}
+        matchAnchorWidth={false}
+        label="Projection locale"
+      >
+        <ForecastProjectionPopover
+          shortcuts={projectionShortcuts}
+          activeCents={openingOverrideCents}
+          apiOpeningCents={stats?.balances.openingCents ?? 0}
+          loadingShortcuts={shortcutLoading}
+          daysInMonth={stats?.meta.daysInMonth ?? 31}
+          activeDay={projectionDay}
+          onSelect={(cents) => {
+            setOpeningOverrideCents(cents);
+            setProjectionOpen(false);
+          }}
+          onSelectDay={(day) => {
+            setProjectionDay(day);
+          }}
+          onReset={() => {
+            setOpeningOverrideCents(null);
+            setProjectionDay(null);
+            setProjectionOpen(false);
+          }}
+        />
+      </Popover>
     </div>
   );
 }
